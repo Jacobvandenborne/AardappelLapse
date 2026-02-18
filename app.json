@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "u",
+      "bundleIdentifier": "com.jacobvandenborne.AardappelLapse",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
