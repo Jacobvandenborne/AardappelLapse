@@ -1,4 +1,5 @@
 console.log("[App] File loading...");
+console.log("[App] Deployment Test: GitHub Action Automation Active");
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
@@ -43,6 +44,7 @@ function MapStack() {
 }
 
 export default function App() {
+  console.log("[App] Rendering component...");
   const [session, setSession] = useState(null);
 
   const [fontsLoaded] = useFonts({
@@ -50,6 +52,10 @@ export default function App() {
     'Montserrat-SemiBold': Montserrat_600SemiBold,
     'Montserrat-Bold': Montserrat_700Bold,
   });
+
+  useEffect(() => {
+    console.log("[App] Fonts loaded status:", fontsLoaded);
+  }, [fontsLoaded]);
 
   const [loading, setLoading] = useState(true);
 
@@ -91,6 +97,7 @@ export default function App() {
   }, []);
 
   if (!fontsLoaded || loading) {
+    console.log("[App] Showing loading screen. fontsLoaded:", fontsLoaded, "loading:", loading);
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: BRAND_COLORS.kiezel }}>
         <ActivityIndicator size="large" color={BRAND_COLORS.primary} />
@@ -99,8 +106,11 @@ export default function App() {
   }
 
   if (!session) {
+    console.log("[App] No session, rendering LoginScreen");
     return <LoginScreen />;
   }
+
+  console.log("[App] Session found, rendering NavigationContainer");
 
   return (
     <NavigationContainer>

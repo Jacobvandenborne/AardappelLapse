@@ -9,7 +9,7 @@ import { saveToQueue, getQueue, removeFromQueue } from '../lib/offlineQueue';
 import { Ionicons } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as turf from '@turf/turf';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import { GoogleDrive } from '../lib/googleDrive';
 
 export default function CameraScreen({ route }) {

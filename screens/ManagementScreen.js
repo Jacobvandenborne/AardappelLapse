@@ -5,7 +5,7 @@ import { GoogleDrive } from '../lib/googleDrive';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import JSZip from 'jszip';
 import parseShp from 'shpjs/lib/parseShp.js';
 import parseDbf from 'parsedbf';
