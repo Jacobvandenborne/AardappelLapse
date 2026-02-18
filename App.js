@@ -1,5 +1,5 @@
 console.log("[App] File loading...");
-console.log("[App] Deployment Test: GitHub Action Automation Active");
+console.log("[App] Deployment Test: Attempt #6 - Manual EAS CLI");
 import * as React from 'react';
 import { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
