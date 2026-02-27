@@ -18,8 +18,11 @@ export default function LoginScreen() {
         console.log("Starting Google Login via Supabase...");
 
         try {
-            const redirectUrl = AuthSession.makeRedirectUri();
-            console.log("Expo Go Redirect URL:", redirectUrl);
+            const redirectUrl = AuthSession.makeRedirectUri({
+                scheme: 'aardappellapse',
+                path: 'google-auth',
+            });
+            console.log("Redirect URL being used:", redirectUrl);
 
             const { data, error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',

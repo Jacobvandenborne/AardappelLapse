@@ -42,6 +42,7 @@ export default function ManagementScreen() {
     const [isProcessingDriveFile, setIsProcessingDriveFile] = useState(false);
     const [currentFolderId, setCurrentFolderId] = useState('root');
     const [navHistory, setNavHistory] = useState([]); // Stack of folder IDs for "Back" button
+    const [fullscreenPhoto, setFullscreenPhoto] = useState(null);
 
     const loadInitialData = async (targetYear = null) => {
         setLoading(true);
@@ -349,7 +350,9 @@ export default function ManagementScreen() {
 
     const renderItem = ({ item }) => (
         <View style={styles.photoCard}>
-            <Image source={{ uri: item.image_url }} style={styles.photoThumb} contentFit="cover" />
+            <TouchableOpacity onPress={() => setFullscreenPhoto(item.image_url)}>
+                <Image source={{ uri: item.image_url }} style={styles.photoThumb} contentFit="cover" />
+            </TouchableOpacity>
             <View style={styles.photoInfo}>
                 <Text style={styles.photoDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
                 <View style={styles.photoMetaRow}>
@@ -403,6 +406,22 @@ export default function ManagementScreen() {
                             </TouchableOpacity>
                         </View>
                     </View>
+                </View>
+            </Modal>
+
+            <Modal
+                visible={!!fullscreenPhoto}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setFullscreenPhoto(null)}
+            >
+                <View style={styles.fullscreenOverlay}>
+                    <TouchableOpacity style={styles.closeFullscreenBtn} onPress={() => setFullscreenPhoto(null)}>
+                        <Ionicons name="close-circle" size={40} color="white" />
+                    </TouchableOpacity>
+                    {fullscreenPhoto && (
+                        <Image source={{ uri: fullscreenPhoto }} style={styles.fullscreenImage} contentFit="contain" />
+                    )}
                 </View>
             </Modal>
 
@@ -552,7 +571,7 @@ const styles = StyleSheet.create({
         borderLeftWidth: 4,
         borderLeftColor: '#667B53',
     },
-    photoThumb: { width: 60, height: 60, borderRadius: 4 },
+    photoThumb: { width: 90, height: 60, borderRadius: 4 },
     photoInfo: { flex: 1, marginLeft: 15 },
     photoDate: {
         fontSize: 14,
@@ -825,5 +844,22 @@ const styles = StyleSheet.create({
         color: 'white',
         fontFamily: 'Montserrat-Bold',
         fontSize: 12,
+    },
+    fullscreenOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.95)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    closeFullscreenBtn: {
+        position: 'absolute',
+        top: 50,
+        right: 20,
+        zIndex: 10,
+        padding: 10,
+    },
+    fullscreenImage: {
+        width: '100%',
+        height: '100%',
     },
 });

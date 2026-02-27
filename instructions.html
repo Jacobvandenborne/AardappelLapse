@@ -1,27 +1,35 @@
 <!DOCTYPE html>
 <html lang="nl">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AardappelLapse – Handleiding voor iPhone</title>
-  <meta name="description" content="Stap-voor-stap uitleg hoe je AardappelLapse installeert en gebruikt op je iPhone via de Expo Go app." />
+  <meta name="description"
+    content="Stap-voor-stap uitleg hoe je AardappelLapse installeert en gebruikt op je iPhone via de Expo Go app." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --primary:  #667B53;
-      --dark:     #3C493A;
-      --light:    #B7D098;
-      --kiezel:   #F7EEE3;
-      --brown:    #5E462F;
-      --white:    #FFFFFF;
-      --black:    #000000;
-      --radius:   16px;
-      --shadow:   0 4px 24px rgba(60,73,58,0.10);
+      --primary: #667B53;
+      --dark: #3C493A;
+      --light: #B7D098;
+      --kiezel: #F7EEE3;
+      --brown: #5E462F;
+      --white: #FFFFFF;
+      --black: #000000;
+      --radius: 16px;
+      --shadow: 0 4px 24px rgba(60, 73, 58, 0.10);
     }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
       font-family: 'Montserrat', sans-serif;
@@ -37,22 +45,31 @@
       text-align: center;
       padding: 48px 24px 36px;
     }
+
     header .logo-badge {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 72px; height: 72px;
+      width: 72px;
+      height: 72px;
       background: var(--primary);
       border-radius: 20px;
       margin-bottom: 20px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
     }
-    header .logo-badge svg { width: 40px; height: 40px; fill: var(--kiezel); }
+
+    header .logo-badge svg {
+      width: 40px;
+      height: 40px;
+      fill: var(--kiezel);
+    }
+
     header h1 {
       font-size: clamp(1.6rem, 5vw, 2.4rem);
       font-weight: 700;
       letter-spacing: -0.5px;
     }
+
     header p {
       margin-top: 10px;
       font-size: 1rem;
@@ -76,6 +93,7 @@
       margin-bottom: 40px;
       border-left: 5px solid var(--primary);
     }
+
     .intro-card p {
       font-size: 0.97rem;
       line-height: 1.7;
@@ -93,7 +111,12 @@
     }
 
     /* ── STEP CARDS ── */
-    .steps { display: flex; flex-direction: column; gap: 20px; margin-bottom: 40px; }
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      margin-bottom: 40px;
+    }
 
     .step {
       background: var(--white);
@@ -105,20 +128,24 @@
       gap: 20px;
       transition: transform 0.2s, box-shadow 0.2s;
     }
+
     .step:hover {
       transform: translateY(-2px);
-      box-shadow: 0 8px 32px rgba(60,73,58,0.15);
+      box-shadow: 0 8px 32px rgba(60, 73, 58, 0.15);
     }
 
     .step-num {
       flex-shrink: 0;
-      width: 40px; height: 40px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
       background: var(--primary);
       color: var(--white);
       font-weight: 700;
       font-size: 1rem;
-      display: flex; align-items: center; justify-content: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .step-body h3 {
@@ -127,17 +154,22 @@
       margin-bottom: 6px;
       color: var(--dark);
     }
+
     .step-body p {
       font-size: 0.9rem;
       line-height: 1.65;
       color: #4a4a4a;
     }
+
     .step-body a {
       color: var(--primary);
       font-weight: 600;
       text-decoration: none;
     }
-    .step-body a:hover { text-decoration: underline; }
+
+    .step-body a:hover {
+      text-decoration: underline;
+    }
 
     /* ── PILL TAG ── */
     .tag {
@@ -160,6 +192,7 @@
       padding: 20px 22px;
       margin-bottom: 40px;
     }
+
     .tip-box .tip-header {
       display: flex;
       align-items: center;
@@ -169,7 +202,11 @@
       color: var(--dark);
       margin-bottom: 10px;
     }
-    .tip-box .tip-header svg { flex-shrink: 0; }
+
+    .tip-box .tip-header svg {
+      flex-shrink: 0;
+    }
+
     .tip-box p {
       font-size: 0.88rem;
       line-height: 1.65;
@@ -177,7 +214,10 @@
     }
 
     /* ── TROUBLESHOOTING ── */
-    .trouble { margin-bottom: 40px; }
+    .trouble {
+      margin-bottom: 40px;
+    }
+
     details {
       background: var(--white);
       border-radius: var(--radius);
@@ -185,6 +225,7 @@
       margin-bottom: 12px;
       overflow: hidden;
     }
+
     summary {
       padding: 18px 22px;
       font-weight: 600;
@@ -197,20 +238,32 @@
       align-items: center;
       transition: background 0.15s;
     }
-    summary:hover { background: var(--kiezel); }
+
+    summary:hover {
+      background: var(--kiezel);
+    }
+
     summary::after {
       content: '＋';
       font-size: 1.1rem;
       color: var(--primary);
     }
-    details[open] summary::after { content: '－'; }
-    details[open] summary { background: var(--kiezel); }
+
+    details[open] summary::after {
+      content: '－';
+    }
+
+    details[open] summary {
+      background: var(--kiezel);
+    }
+
     .details-body {
       padding: 0 22px 18px;
       font-size: 0.88rem;
       line-height: 1.7;
       color: #4a4a4a;
     }
+
     .details-body code {
       display: inline-block;
       background: #f0ede8;
@@ -226,182 +279,239 @@
       text-align: center;
       padding: 28px 24px;
       background: var(--dark);
-      color: rgba(247,238,227,0.65);
+      color: rgba(247, 238, 227, 0.65);
       font-size: 0.8rem;
     }
-    footer strong { color: var(--kiezel); }
+
+    footer strong {
+      color: var(--kiezel);
+    }
 
     /* ── RESPONSIVE ── */
     @media (max-width: 480px) {
-      .step { flex-direction: column; gap: 14px; }
+      .step {
+        flex-direction: column;
+        gap: 14px;
+      }
     }
   </style>
 </head>
+
 <body>
 
-<header>
-  <div class="logo-badge">
-    <!-- Camera / potato leaf icon (SVG) -->
-    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 5.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/>
-      <path d="M20 5h-2.2l-1-2H7.2l-1 2H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 13H4V7h3.2l1-2h7.6l1 2H20v11z"/>
-    </svg>
-  </div>
-  <h1>AardappelLapse</h1>
-  <p>Handleiding voor iPhone-gebruikers</p>
-</header>
-
-<main>
-
-  <!-- INTRO -->
-  <div class="intro-card">
-    <p>
-      Met de <strong>AardappelLapse</strong> app kun je eenvoudig perceelfoto's maken, de kaart bekijken en timelapses starten. Deze handleiding legt stap voor stap uit hoe je de app installeert en opstart op je iPhone.
-    </p>
-  </div>
-
-  <!-- STAP 1–4 -->
-  <p class="section-title">Aan de slag</p>
-  <div class="steps">
-
-    <div class="step">
-      <div class="step-num">1</div>
-      <div class="step-body">
-        <h3>Download Expo Go</h3>
-        <p>
-          De app werkt via <strong>Expo Go</strong>. Download deze gratis app uit de App Store:
-          <br /><br />
-          <a href="https://apps.apple.com/nl/app/expo-go/id982107779" target="_blank">
-            🍎 Open App Store – Expo Go
-          </a>
-        </p>
-        <span class="tag">Gratis · App Store</span>
-      </div>
-    </div>
-
-    <div class="step">
-      <div class="step-num">2</div>
-      <div class="step-body">
-        <h3>Maak een Expo-account aan</h3>
-        <p>
-          Open Expo Go en tik op <strong>Create an account</strong>. Gebruik je zakelijke e-mailadres. Heb je al een account? Log dan in met <strong>Log in</strong>.
-        </p>
-      </div>
-    </div>
-
-    <div class="step">
-      <div class="step-num">3</div>
-      <div class="step-body">
-        <h3>Ontvang een uitnodiging</h3>
-        <p>
-          Stuur je e-mailadres (van het Expo-account) door naar Jacob. Hij voegt je toe aan het project. Je ontvangt een bevestigingsmail vanuit Expo.
-        </p>
-      </div>
-    </div>
-
-    <div class="step">
-      <div class="step-num">4</div>
-      <div class="step-body">
-        <h3>Open de app</h3>
-        <p>
-          Open Expo Go op je iPhone. Ga naar het tabblad <strong>Profile</strong> en log in. Onder <strong>"Shared with you"</strong> of <strong>"Recently in development"</strong> zie je <em>AardappelLapse</em> verschijnen. Tik erop om de app te starten.
-        </p>
-        <span class="tag">Geen QR-code nodig</span>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- TIP -->
-  <div class="tip-box">
-    <div class="tip-header">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#667B53" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+  <header>
+    <div class="logo-badge">
+      <!-- Camera / potato leaf icon (SVG) -->
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7zm0 5.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4z" />
+        <path
+          d="M20 5h-2.2l-1-2H7.2l-1 2H4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 13H4V7h3.2l1-2h7.6l1 2H20v11z" />
       </svg>
-      Tip: al ingelogd?
     </div>
-    <p>
-      Als je al bent ingelogd in Expo Go en AardappelLapse verschijnt niet, ga dan naar <strong>Profile → See all</strong>. Staat de app er niet? Vraag Jacob om je opnieuw uit te nodigen.
-    </p>
-  </div>
+    <h1>AardappelLapse</h1>
+    <p>Handleiding voor iPhone-gebruikers</p>
+  </header>
 
-  <!-- APP GEBRUIK -->
-  <p class="section-title">De app gebruiken</p>
-  <div class="steps">
+  <main>
 
-    <div class="step">
-      <div class="step-num">🗺</div>
-      <div class="step-body">
-        <h3>Kaart</h3>
-        <p>Het eerste tabblad toont een kaart van percelen. Tik op een perceel voor meer informatie of om een timelapse te bekijken.</p>
-      </div>
+    <!-- INTRO -->
+    <div class="intro-card">
+      <p>
+        Met de <strong>AardappelLapse</strong> app kun je eenvoudig perceelfoto's maken, de kaart bekijken en timelapses
+        starten. Deze handleiding legt stap voor stap uit hoe je de app installeert en opstart op je iPhone.
+      </p>
+    </div>
     </div>
 
-    <div class="step">
-      <div class="step-num">📷</div>
-      <div class="step-body">
-        <h3>Camera</h3>
-        <p>Tik op het camera-tabblad om een foto te maken van een perceel. Geef toestemming voor camera en locatie als daarom gevraagd wordt.</p>
+    <!-- ANDROID SECTIE -->
+    <p class="section-title">Installatie Android (APK)</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">🤖</div>
+        <div class="step-body">
+          <h3>Download het installatiebestand</h3>
+          <p>
+            Download de app direct via deze link op je Android telefoon:
+            <br /><br />
+            <a href="https://expo.dev/artifacts/eas/poDyGTn424N78hFvD2w8Jq.apk" target="_blank">
+              📦 Download AardappelLapse APK
+            </a>
+          </p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">⚙️</div>
+        <div class="step-body">
+          <h3>Installeren</h3>
+          <p>
+            Open het gedownloade bestand. Als je telefoon vraagt om "Installeren van onbekende bronnen", sta dit dan toe
+            voor je browser/bestandsbeheer. Tik daarna op <strong>Installeren</strong>.
+          </p>
+        </div>
       </div>
     </div>
 
-    <div class="step">
-      <div class="step-num">⚙️</div>
-      <div class="step-body">
-        <h3>Beheer</h3>
-        <p>Hier kun je opnamen beheren, percelen bekijken en je account-instellingen aanpassen.</p>
+    <!-- IPHONE SECTIE -->
+    <p class="section-title">Installatie iPhone (Expo Go)</p>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Download Expo Go</h3>
+          <p>
+            De app werkt via <strong>Expo Go</strong>. Download deze gratis app uit de App Store:
+            <br /><br />
+            <a href="https://apps.apple.com/nl/app/expo-go/id982107779" target="_blank">
+              🍎 Open App Store – Expo Go
+            </a>
+          </p>
+          <span class="tag">Gratis · App Store</span>
+        </div>
       </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Maak een Expo-account aan</h3>
+          <p>
+            Open Expo Go en tik op <strong>Create an account</strong>. Gebruik je zakelijke e-mailadres. Heb je al een
+            account? Log dan in met <strong>Log in</strong>.
+          </p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Ontvang een uitnodiging</h3>
+          <p>
+            Stuur je e-mailadres (van het Expo-account) door naar Jacob. Hij voegt je toe aan het project. Je ontvangt
+            een bevestigingsmail vanuit Expo.
+          </p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Open de app</h3>
+          <p>
+            Open Expo Go op je iPhone. Ga naar het tabblad <strong>Profile</strong> en log in. Onder <strong>"Shared
+              with you"</strong> of <strong>"Recently in development"</strong> zie je <em>AardappelLapse</em>
+            verschijnen. Tik erop om de app te starten.
+          </p>
+          <span class="tag">Geen QR-code nodig</span>
+        </div>
+      </div>
+
     </div>
 
-  </div>
-
-  <!-- TROUBLESHOOTING -->
-  <p class="section-title">Problemen oplossen</p>
-  <div class="trouble">
-
-    <details>
-      <summary>De app verschijnt niet in Expo Go</summary>
-      <div class="details-body">
-        Controleer of je bent ingelogd met hetzelfde e-mailadres als waarmee je bent uitgenodigd. Ga naar <strong>Profile</strong> in Expo Go en kijk bij <em>Shared with you</em>. Neem contact op met Jacob als het probleem aanhoudt.
+    <!-- TIP -->
+    <div class="tip-box">
+      <div class="tip-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#667B53" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        Tip: al ingelogd?
       </div>
-    </details>
+      <p>
+        Als je al bent ingelogd in Expo Go en AardappelLapse verschijnt niet, ga dan naar <strong>Profile → See
+          all</strong>. Staat de app er niet? Vraag Jacob om je opnieuw uit te nodigen.
+      </p>
+    </div>
 
-    <details>
-      <summary>Toestemming voor camera of locatie geweigerd</summary>
-      <div class="details-body">
-        Ga naar <strong>Instellingen → Privacy → Camera</strong> (of Locatiediensten) op je iPhone en zorg dat <em>Expo Go</em> toegang heeft. Herstart daarna de app.
+    <!-- APP GEBRUIK -->
+    <p class="section-title">De app gebruiken</p>
+    <div class="steps">
+
+      <div class="step">
+        <div class="step-num">🗺</div>
+        <div class="step-body">
+          <h3>Kaart</h3>
+          <p>Het eerste tabblad toont een kaart van percelen. Tik op een perceel voor meer informatie of om een
+            timelapse te bekijken.</p>
+        </div>
       </div>
-    </details>
 
-    <details>
-      <summary>De app laadt niet / blijft hangen op het laadscherm</summary>
-      <div class="details-body">
-        Sluit Expo Go volledig af (swipe omhoog en weg) en open de app opnieuw. Controleer ook of je verbinding hebt met internet (Wi-Fi of 4G/5G). Als het probleem blijft, stuur dan een bericht naar Jacob.
+      <div class="step">
+        <div class="step-num">📷</div>
+        <div class="step-body">
+          <h3>Camera</h3>
+          <p>Tik op het camera-tabblad om een foto te maken van een perceel. Geef toestemming voor camera en locatie als
+            daarom gevraagd wordt.</p>
+        </div>
       </div>
-    </details>
 
-    <details>
-      <summary>Inloggen met Google werkt niet</summary>
-      <div class="details-body">
-        Zorg dat je een Google-account gebruikt dat door Jacob is goedgekeurd. Bij een foutmelding als <code>redirect_uri_mismatch</code>, neem dan direct contact op met Jacob zodat hij de configuratie kan controleren.
+      <div class="step">
+        <div class="step-num">⚙️</div>
+        <div class="step-body">
+          <h3>Beheer</h3>
+          <p>Hier kun je opnamen beheren, percelen bekijken en je account-instellingen aanpassen.</p>
+        </div>
       </div>
-    </details>
 
-    <details>
-      <summary>De app vraagt om een update</summary>
-      <div class="details-body">
-        Updates worden automatisch geladen wanneer je de app opent met een internetverbinding. Je hoeft niets extra te installeren. Wacht een paar seconden op het laadscherm totdat de update klaar is.
-      </div>
-    </details>
+    </div>
 
-  </div>
+    <!-- TROUBLESHOOTING -->
+    <p class="section-title">Problemen oplossen</p>
+    <div class="trouble">
 
-</main>
+      <details>
+        <summary>De app verschijnt niet in Expo Go</summary>
+        <div class="details-body">
+          Controleer of je bent ingelogd met hetzelfde e-mailadres als waarmee je bent uitgenodigd. Ga naar
+          <strong>Profile</strong> in Expo Go en kijk bij <em>Shared with you</em>. Neem contact op met Jacob als het
+          probleem aanhoudt.
+        </div>
+      </details>
 
-<footer>
-  <strong>AardappelLapse</strong> · Van den Borne Aardappelen<br />
-  Vragen? Neem contact op met Jacob.
-</footer>
+      <details>
+        <summary>Toestemming voor camera of locatie geweigerd</summary>
+        <div class="details-body">
+          Ga naar <strong>Instellingen → Privacy → Camera</strong> (of Locatiediensten) op je iPhone en zorg dat
+          <em>Expo Go</em> toegang heeft. Herstart daarna de app.
+        </div>
+      </details>
+
+      <details>
+        <summary>De app laadt niet / blijft hangen op het laadscherm</summary>
+        <div class="details-body">
+          Sluit Expo Go volledig af (swipe omhoog en weg) en open de app opnieuw. Controleer ook of je verbinding hebt
+          met internet (Wi-Fi of 4G/5G). Als het probleem blijft, stuur dan een bericht naar Jacob.
+        </div>
+      </details>
+
+      <details>
+        <summary>Inloggen met Google werkt niet</summary>
+        <div class="details-body">
+          Zorg dat je een Google-account gebruikt dat door Jacob is goedgekeurd. Bij een foutmelding als
+          <code>redirect_uri_mismatch</code>, neem dan direct contact op met Jacob zodat hij de configuratie kan
+          controleren.
+        </div>
+      </details>
+
+      <details>
+        <summary>De app vraagt om een update</summary>
+        <div class="details-body">
+          Updates worden automatisch geladen wanneer je de app opent met een internetverbinding. Je hoeft niets extra te
+          installeren. Wacht een paar seconden op het laadscherm totdat de update klaar is.
+        </div>
+      </details>
+
+    </div>
+
+  </main>
+
+  <footer>
+    <strong>AardappelLapse</strong> · Van den Borne Aardappelen<br />
+    Vragen? Neem contact op met Jacob.
+  </footer>
 
 </body>
+
 </html>

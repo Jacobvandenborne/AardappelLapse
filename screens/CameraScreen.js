@@ -4,7 +4,7 @@ import { Button, StyleSheet, Text, TouchableOpacity, View, Alert, ActivityIndica
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
 import NetInfo from '@react-native-community/netinfo';
-import { supabase, fetchNearestPhoto, fetchParcels, fetchCroppingYears } from '../lib/supabase';
+import { supabase, fetchNearestPhoto, fetchParcels, fetchCroppingYears, GOOGLE_DRIVE_FOLDERS } from '../lib/supabase';
 import { saveToQueue, getQueue, removeFromQueue } from '../lib/offlineQueue';
 import { Ionicons } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -130,9 +130,11 @@ export default function CameraScreen({ route }) {
         try {
             const loc = await Location.getCurrentPositionAsync({});
             const nearestUrl = await fetchNearestPhoto(loc.coords.latitude, loc.coords.longitude);
-            if (nearestUrl) setGhostImage(nearestUrl);
+            // Fix: setGhostImage to nearestUrl (can be null, which clears the ghost)
+            setGhostImage(nearestUrl);
         } catch (e) {
             console.log("Error fetching ghost image:", e);
+            setGhostImage(null);
         } finally {
             setLoadingGhost(false);
         }
@@ -148,14 +150,14 @@ export default function CameraScreen({ route }) {
         );
     }
 
-    const triggerGoogleBackup = async (uri, fileName) => {
+    const triggerGoogleBackup = async (uri, fileName, folderId = null) => {
         setBackupStatus('backing-up');
         try {
-            console.log("[Camera] Starting Google Drive backup for:", fileName);
+            console.log("[Camera] Starting Google Drive backup for:", fileName, "Folder:", folderId);
             const base64 = await FileSystem.readAsStringAsync(uri, {
                 encoding: 'base64',
             });
-            const driveId = await GoogleDrive.uploadFile(fileName, 'image/jpeg', base64);
+            const driveId = await GoogleDrive.uploadFile(fileName, 'image/jpeg', base64, folderId);
             if (driveId) {
                 console.log("[Camera] Google Drive backup successful, ID:", driveId);
                 setBackupStatus('success');
@@ -267,7 +269,8 @@ export default function CameraScreen({ route }) {
                         const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-').slice(0, 5);
                         const sanitizeParcel = (parcelName || "Onbekend").replace(/[^a-z0-9]/gi, '_');
                         const fileName = `${dateStr}_${timeStr}_${sanitizeParcel}_${Date.now()}.jpg`;
-                        triggerGoogleBackup(photo.uri, fileName);
+                        const driveFolderId = GOOGLE_DRIVE_FOLDERS[activeYear] || null;
+                        triggerGoogleBackup(photo.uri, fileName, driveFolderId);
 
                         Alert.alert('Succes', `Foto geüpload! Perceel: ${parcelName || 'Onbekend'}`);
                     } catch (e) {
@@ -304,7 +307,8 @@ export default function CameraScreen({ route }) {
                 const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-').slice(0, 5);
                 const sanitizeParcel = (parcelName || "Onbekend").replace(/[^a-z0-9]/gi, '_');
                 const fileName = `${dateStr}_${timeStr}_${sanitizeParcel}_${Date.now()}.jpg`;
-                triggerGoogleBackup(item.uri, fileName);
+                const driveFolderId = GOOGLE_DRIVE_FOLDERS[activeYear] || null;
+                triggerGoogleBackup(item.uri, fileName, driveFolderId);
 
                 await removeFromQueue(item.id);
                 successCount++;
