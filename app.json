@@ -3,7 +3,7 @@
     "owner": "vdborneaardappelen",
     "name": "AardappelLapse",
     "slug": "AardappelLapse",
-    "version": "1.0.0",
+    "version": "1.1.1",
     "scheme": "aardappellapse",
     "orientation": "default",
     "icon": "./assets/icon.png",

@@ -31,7 +31,7 @@ export default function TimelapseScreen({ route }) {
         if (isPlaying && sortedPhotos.length > 1) {
             timerRef.current = setInterval(() => {
                 setCurrentIndex((prev) => (prev + 1) % sortedPhotos.length);
-            }, 600);
+            }, 300); // Faster interval for snappier timelapse
         } else {
             clearInterval(timerRef.current);
         }
@@ -50,7 +50,7 @@ export default function TimelapseScreen({ route }) {
                 source={{ uri: currentPhoto.image_url }}
                 style={styles.image}
                 contentFit="contain"
-                transition={200}
+                transition={0}
                 onLoad={() => console.log('Timelapse Image Loaded:', currentPhoto.image_url)}
                 onError={(e) => console.log('Timelapse Image Error:', e.error, currentPhoto.image_url)}
             />

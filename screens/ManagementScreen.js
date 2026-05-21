@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, FlatList, TouchableOpacity, Alert, ActivityIndicator, Modal, TextInput } from 'react-native';
-import { supabase, fetchAllPhotoLocations, fetchParcels, fetchCroppingYears, insertParcels, insertCroppingYear } from '../lib/supabase';
+import { supabase, fetchAllPhotoLocations, fetchParcels, fetchCroppingYears, insertParcels, insertCroppingYear, GOOGLE_DRIVE_FOLDERS } from '../lib/supabase';
 import { GoogleDrive } from '../lib/googleDrive';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,6 +43,9 @@ export default function ManagementScreen() {
     const [currentFolderId, setCurrentFolderId] = useState('root');
     const [navHistory, setNavHistory] = useState([]); // Stack of folder IDs for "Back" button
     const [fullscreenPhoto, setFullscreenPhoto] = useState(null);
+    const [userEmail, setUserEmail] = useState('');
+    const [isSyncingDrive, setIsSyncingDrive] = useState(false);
+    const [syncProgress, setSyncProgress] = useState(0);
 
     const loadInitialData = async (targetYear = null) => {
         setLoading(true);
@@ -86,11 +89,11 @@ export default function ManagementScreen() {
                 console.log("[Management] No user found");
                 return;
             }
+            setUserEmail(user.email);
 
             const { data, error } = await supabase
                 .from('photos')
                 .select('*')
-                .eq('user_id', user.id)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -344,38 +347,242 @@ export default function ManagementScreen() {
         );
     };
 
+    const handleSyncAllDrive = async () => {
+        const unsynced = photos.filter(p => !p.google_drive_id);
+        if (unsynced.length === 0) {
+            Alert.alert("Info", "Alle foto's zijn al gesynchroniseerd.");
+            return;
+        }
+
+        Alert.alert(
+            "Sync naar Drive",
+            `Er zijn ${unsynced.length} foto's die nog niet in Google Drive staan. Wil je deze nu uploaden?`,
+            [
+                { text: "Annuleren", style: "cancel" },
+                {
+                    text: "Start Sync",
+                    onPress: async () => {
+                        setIsSyncingDrive(true);
+                        setSyncProgress(0);
+                        const driveFolderId = GOOGLE_DRIVE_FOLDERS[selectedYear] || null;
+                        let count = 0;
+
+                        for (const photo of unsynced) {
+                            try {
+                                // 1. Download photo
+                                const resp = await fetch(photo.image_url);
+                                const blob = await resp.blob();
+                                const base64 = await new Promise((resolve, reject) => {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                                    reader.onerror = reject;
+                                    reader.readAsDataURL(blob);
+                                });
+
+                                // 2. Upload to Drive
+                                const fileName = photo.image_url.split('/').pop();
+                                const driveId = await GoogleDrive.uploadFile(fileName, 'image/jpeg', base64, driveFolderId);
+
+                                if (driveId) {
+                                    // 3. Update Supabase
+                                    await supabase.from('photos').update({ google_drive_id: driveId }).eq('id', photo.id);
+                                    count++;
+                                }
+                            } catch (e) {
+                                console.error("[Sync] Error syncing photo:", photo.id, e);
+                            }
+                            setSyncProgress(++count / unsynced.length);
+                        }
+
+                        setIsSyncingDrive(false);
+                        fetchMyPhotos(); // Refresh list
+                        Alert.alert("Klaar", `${count} foto's zijn succesvol naar Google Drive gekopieerd.`);
+                    }
+                }
+            ]
+        );
+    };
+
     const handleLogout = async () => {
         await supabase.auth.signOut();
     };
 
     const renderItem = ({ item }) => (
         <View style={styles.photoCard}>
-            <TouchableOpacity onPress={() => setFullscreenPhoto(item.image_url)}>
-                <Image source={{ uri: item.image_url }} style={styles.photoThumb} contentFit="cover" />
+            <TouchableOpacity
+                style={styles.thumbContainer}
+                onPress={() => setFullscreenPhoto(item.image_url)}
+            >
+                <Image
+                    source={{ uri: item.image_url }}
+                    style={styles.photoThumb}
+                    contentFit="cover"
+                />
             </TouchableOpacity>
+
             <View style={styles.photoInfo}>
-                <Text style={styles.photoDate}>{new Date(item.created_at).toLocaleDateString()}</Text>
-                <View style={styles.photoMetaRow}>
-                    <Text style={styles.photoTime}>{new Date(item.created_at).toLocaleTimeString()}</Text>
-                    {item.parcel_name && (
-                        <Text style={styles.photoParcel}> • {item.parcel_name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={[styles.cardTitle, { flex: 1 }]} numberOfLines={1}>{item.parcel_name || "Onbekend Perceel"}</Text>
+                    {item.google_drive_id ? (
+                        <Ionicons name="cloud-done" size={16} color="#667B53" style={{ marginLeft: 5 }} />
+                    ) : (
+                        <Ionicons name="cloud-upload-outline" size={16} color="#D0A367" style={{ marginLeft: 5 }} />
+                    )}
+                </View>
+                <View style={styles.cardSub}>
+                    <Ionicons name="calendar-outline" size={10} color="#5E462F" />
+                    <Text style={styles.cardDate}>
+                        {new Date(item.created_at).toLocaleDateString('nl-NL', { day: '2-digit', month: 'short' })}
+                    </Text>
+                    <Ionicons name="time-outline" size={10} color="#5E462F" style={{ marginLeft: 8 }} />
+                    <Text style={styles.cardTime}>
+                        {new Date(item.created_at).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                </View>
+
+                {/* Weather & Advanced Info (Option 5 & 3) */}
+                <View style={[styles.cardSub, { marginTop: 4 }]}>
+                    {item.weather_temp !== null && (
+                        <>
+                            <Ionicons name="thermometer-outline" size={10} color="#667B53" />
+                            <Text style={styles.weatherText}>{Math.round(item.weather_temp)}°C</Text>
+                        </>
+                    )}
+                    {item.weather_description && (
+                        <Text style={[styles.weatherText, { fontStyle: 'italic', opacity: 0.7 }]}>
+                            • {item.weather_description}
+                        </Text>
+                    )}
+                    {item.ndvi_value && (
+                        <View style={styles.ndviBadgeSmall}>
+                            <Text style={styles.ndviBadgeText}>NDVI: {item.ndvi_value.toFixed(2)}</Text>
+                        </View>
                     )}
                 </View>
             </View>
-            <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item)}>
-                <Ionicons name="trash-outline" size={24} color="#FF3B30" />
+
+            <TouchableOpacity style={styles.deleteBtnCompact} onPress={() => handleDelete(item)}>
+                <Ionicons name="trash-outline" size={20} color="#D51317" />
             </TouchableOpacity>
         </View>
     );
 
     return (
-        <>
-            <Modal
-                visible={showYearModal}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setShowYearModal(false)}
-            >
+        <View style={styles.container}>
+            <View style={styles.header}>
+                <View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={styles.vdbLabel}>VDBORNE</Text>
+                        <View style={{ backgroundColor: '#667B53', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4, marginLeft: 8 }}>
+                            <Text style={{ fontSize: 7, color: 'white', fontFamily: 'Montserrat-Bold' }}>v1.1.1</Text>
+                        </View>
+                    </View>
+                    <Text style={styles.title}>FIELD JOURNAL</Text>
+                </View>
+                <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
+                    <Ionicons name="log-out-outline" size={20} color="#D51317" />
+                </TouchableOpacity>
+            </View>
+
+            {loading && !refreshing ? (
+                <View style={styles.center}>
+                    <ActivityIndicator size="large" color="#667B53" />
+                    <Text style={styles.loadingText}>Velden inladen...</Text>
+                </View>
+            ) : (
+                <FlatList
+                    data={[{ id: 'header' }, ...photos]}
+                    keyExtractor={(item) => item.id.toString()}
+                    onRefresh={() => { setRefreshing(true); loadInitialData(); }}
+                    refreshing={refreshing}
+                    contentContainerStyle={styles.list}
+                    showsVerticalScrollIndicator={false}
+                    renderItem={({ item }) => {
+                        if (item.id === 'header') {
+                            return (
+                                <View style={styles.configCard}>
+                                    <View style={styles.yearRow}>
+                                        <Text style={styles.configLabel}>TEELTJAAR:</Text>
+                                        <View style={styles.yearScroll}>
+                                            {years.map(y => (
+                                                <TouchableOpacity
+                                                    key={y.year}
+                                                    style={[styles.yearChip, selectedYear === y.year && styles.yearChipActive]}
+                                                    onPress={() => handleYearChange(y.year)}
+                                                >
+                                                    <Text style={[styles.yearChipText, selectedYear === y.year && styles.yearChipActiveText]}>
+                                                        {y.year}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                            <TouchableOpacity style={styles.addYearSmall} onPress={() => setShowYearModal(true)}>
+                                                <Ionicons name="add" size={16} color="#667B53" />
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.cloudInfo}>
+                                        <View style={styles.cloudRow}>
+                                            <Ionicons name="person-circle-outline" size={14} color="#667B53" />
+                                            <Text style={styles.cloudText}>Account: <Text style={{ fontFamily: 'Montserrat-Bold' }}>{userEmail || 'Laden...'}</Text></Text>
+                                        </View>
+                                        <View style={styles.cloudRow}>
+                                            <Ionicons name="folder-open-outline" size={14} color="#667B53" />
+                                            <Text style={styles.cloudText} numberOfLines={1}>
+                                                Folder ID: <Text style={{ fontFamily: 'Montserrat-Bold', fontSize: 9 }}>{GOOGLE_DRIVE_FOLDERS[selectedYear] || 'Automatisch'}</Text>
+                                            </Text>
+                                        </View>
+                                    </View>
+
+                                    <View style={styles.actionRow}>
+                                        <TouchableOpacity style={styles.actionBtn} onPress={handleUploadShapefile}>
+                                            <Ionicons name="cloud-upload" size={18} color="white" />
+                                            <Text style={styles.actionBtnText}>NIEUWE PERCELEN</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[styles.actionBtn, { backgroundColor: '#4285F4' }]}
+                                            onPress={handleSyncAllDrive}
+                                            disabled={isSyncingDrive}
+                                        >
+                                            {isSyncingDrive ? (
+                                                <ActivityIndicator size="small" color="white" />
+                                            ) : (
+                                                <Ionicons name="cloud-sync" size={18} color="white" />
+                                            )}
+                                            <Text style={styles.actionBtnText}>
+                                                {isSyncingDrive ? `SYNC ${Math.round(syncProgress * 100)}%` : 'SYNC DRIVE'}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {parcels.length > 0 && (
+                                        <View style={styles.parcelStat}>
+                                            <Text style={styles.parcelStatText}>{parcels.length} percelen actief in {selectedYear}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            );
+                        }
+                        return renderItem({ item });
+                    }}
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <Ionicons name="camera-outline" size={80} color="#D0A367" style={{ opacity: 0.5 }} />
+                            <Text style={styles.emptyText}>Geen foto's gevonden voor dit account.</Text>
+                        </View>
+                    }
+                    ListFooterComponent={
+                        <View style={{ padding: 40, alignItems: 'center', opacity: 0.3 }}>
+                            <Text style={{ fontFamily: 'Montserrat-SemiBold', fontSize: 10 }}>VERSIE 1.1.1 (21-05-2026)</Text>
+                            <Text style={{ fontFamily: 'Montserrat-Regular', fontSize: 8, marginTop: 4 }}>ADVANCED FEATURES: WEER & NDVI</Text>
+                        </View>
+                    }
+                />
+            )}
+
+            {/* Modals are handled below (keeping original modal logic) */}
+            <Modal visible={showYearModal} transparent animationType="fade" onRequestClose={() => setShowYearModal(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>NIEUW TEELTJAAR</Text>
@@ -384,467 +591,343 @@ export default function ManagementScreen() {
                             value={newYearInput}
                             onChangeText={setNewYearInput}
                             keyboardType="numeric"
-                            placeholder="Bijv. 2026"
+                            placeholder="2026"
                         />
                         <View style={styles.modalButtons}>
-                            <TouchableOpacity
-                                style={[styles.modalBtn, styles.cancelBtn]}
-                                onPress={() => setShowYearModal(false)}
-                            >
+                            <TouchableOpacity style={[styles.modalBtn, styles.cancelBtn]} onPress={() => setShowYearModal(false)}>
                                 <Text style={styles.cancelBtnText}>ANNULEREN</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.modalBtn, styles.confirmBtn]}
-                                onPress={handleAddYear}
-                                disabled={isCreatingYear}
-                            >
-                                {isCreatingYear ? (
-                                    <ActivityIndicator color="white" size="small" />
-                                ) : (
-                                    <Text style={styles.confirmBtnText}>AANMAKEN</Text>
-                                )}
+                            <TouchableOpacity style={[styles.modalBtn, styles.confirmBtn]} onPress={handleAddYear} disabled={isCreatingYear}>
+                                {isCreatingYear ? <ActivityIndicator color="white" /> : <Text style={styles.confirmBtnText}>OPSLAAN</Text>}
                             </TouchableOpacity>
                         </View>
                     </View>
                 </View>
             </Modal>
 
-            <Modal
-                visible={!!fullscreenPhoto}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setFullscreenPhoto(null)}
-            >
+            <Modal visible={!!fullscreenPhoto} transparent animationType="fade" onRequestClose={() => setFullscreenPhoto(null)}>
                 <View style={styles.fullscreenOverlay}>
                     <TouchableOpacity style={styles.closeFullscreenBtn} onPress={() => setFullscreenPhoto(null)}>
-                        <Ionicons name="close-circle" size={40} color="white" />
+                        <Ionicons name="close-circle" size={44} color="white" />
                     </TouchableOpacity>
                     {fullscreenPhoto && (
                         <Image source={{ uri: fullscreenPhoto }} style={styles.fullscreenImage} contentFit="contain" />
                     )}
                 </View>
             </Modal>
-
-
-
-            <View style={styles.container}>
-                <View style={styles.header}>
-                    <Text style={styles.title}>MIJN FOTO'S</Text>
-                    <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
-                        <Ionicons name="log-out-outline" size={18} color="#D51317" />
-                        <Text style={styles.logoutText}>LOG UIT</Text>
-                    </TouchableOpacity>
-                </View>
-
-                {loading && !refreshing ? (
-                    <View style={styles.center}>
-                        <ActivityIndicator size="large" color="#667B53" />
-                    </View>
-                ) : (
-                    <FlatList
-                        data={[{ id: 'header' }, ...photos]}
-                        keyExtractor={(item) => item.id.toString()}
-                        onRefresh={() => { setRefreshing(true); loadInitialData(); }}
-                        refreshing={refreshing}
-                        contentContainerStyle={styles.list}
-                        renderItem={({ item }) => {
-                            if (item.id === 'header') {
-                                return (
-                                    <View style={styles.sectionContainer}>
-                                        <View style={styles.sectionHeader}>
-                                            <Text style={styles.sectionTitle}>TEELTJAAR & PERCELEN</Text>
-                                        </View>
-
-                                        <View style={styles.yearPicker}>
-                                            {years.map(y => (
-                                                <TouchableOpacity
-                                                    key={y.year}
-                                                    style={[styles.yearBtn, selectedYear === y.year && styles.yearBtnActive]}
-                                                    onPress={() => handleYearChange(y.year)}
-                                                >
-                                                    <Text style={[styles.yearBtnText, selectedYear === y.year && styles.yearBtnActiveText]}>
-                                                        {y.year}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            ))}
-                                            <TouchableOpacity
-                                                style={styles.addYearBtn}
-                                                onPress={() => setShowYearModal(true)}
-                                            >
-                                                <Ionicons name="add-circle" size={24} color="#667B53" />
-                                                <Text style={styles.addYearBtnText}>NIEUW</Text>
-                                            </TouchableOpacity>
-                                        </View>
-
-                                        <View style={styles.uploadRow}>
-                                            <TouchableOpacity
-                                                style={[styles.uploadBtn, { flex: 1 }]}
-                                                onPress={handleUploadShapefile}
-                                                disabled={uploadingParcels}
-                                            >
-                                                <Ionicons name="document-outline" size={18} color="white" />
-                                                <Text style={styles.uploadBtnText}>SHAPEFILE UPLOADEN (.ZIP)</Text>
-                                            </TouchableOpacity>
-                                        </View>
-
-                                        {parcels.length > 0 && (
-                                            <View style={styles.parcelList}>
-                                                <Text style={styles.parcelCountText}>{parcels.length} percelen geladen</Text>
-                                                <View style={styles.parcelChips}>
-                                                    {parcels.slice(0, 10).map(p => (
-                                                        <View key={p.id} style={styles.parcelChip}>
-                                                            <Text style={styles.parcelChipText}>{p.name}</Text>
-                                                        </View>
-                                                    ))}
-                                                    {parcels.length > 10 && <Text style={styles.moreText}>+{parcels.length - 10} meer...</Text>}
-                                                </View>
-                                            </View>
-                                        )}
-
-                                        <View style={[styles.sectionHeader, { marginTop: 30 }]}>
-                                            <Text style={styles.sectionTitle}>MIJN FOTO'S</Text>
-                                        </View>
-                                    </View>
-                                );
-                            }
-                            return renderItem({ item });
-                        }}
-                        ListEmptyComponent={
-                            <View style={styles.emptyContainer}>
-                                <Ionicons name="images-outline" size={60} color="#ccc" />
-                                <Text style={styles.emptyText}>Je hebt nog geen foto's gemaakt.</Text>
-                            </View>
-                        }
-                    />
-                )}
-            </View>
-        </>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F7EEE3' },
     header: {
-        paddingTop: 60,
-        paddingHorizontal: 20,
+        paddingTop: 65,
+        paddingHorizontal: 25,
         paddingBottom: 20,
         backgroundColor: '#FFFFFF',
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        elevation: 2,
         borderBottomWidth: 1,
-        borderBottomColor: '#B7D098',
+        borderBottomColor: 'rgba(102, 123, 83, 0.2)',
+    },
+    vdbLabel: {
+        fontSize: 10,
+        fontFamily: 'Montserrat-Bold',
+        letterSpacing: 2.5,
+        color: '#667B53',
+        marginBottom: 2
     },
     title: {
-        fontSize: 20,
+        fontSize: 18,
         fontFamily: 'Montserrat-Bold',
-        letterSpacing: 2,
+        letterSpacing: 1,
         color: '#000000'
     },
     logoutBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#D51317',
-    },
-    logoutText: {
-        color: '#D51317',
-        fontFamily: 'Montserrat-Bold',
-        marginLeft: 5,
-        fontSize: 12,
+        padding: 8,
+        borderRadius: 10,
+        backgroundColor: 'rgba(213, 19, 23, 0.05)',
     },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    list: { padding: 15 },
+    list: { padding: 20 },
+
+    // Management Config Card
+    configCard: {
+        backgroundColor: 'white',
+        borderRadius: 20,
+        padding: 20,
+        marginBottom: 25,
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+    },
+    configLabel: {
+        fontSize: 11,
+        fontFamily: 'Montserrat-Bold',
+        color: '#5E462F',
+        marginRight: 10
+    },
+    yearRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 15
+    },
+    yearScroll: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    yearChip: {
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 8,
+        backgroundColor: '#F7EEE3',
+        marginRight: 8,
+        borderWidth: 1,
+        borderColor: '#B7D098'
+    },
+    yearChipActive: {
+        backgroundColor: '#667B53',
+        borderColor: '#667B53'
+    },
+    yearChipText: {
+        fontFamily: 'Montserrat-Bold',
+        fontSize: 12,
+        color: '#667B53'
+    },
+    yearChipActiveText: {
+        color: 'white'
+    },
+    addYearSmall: {
+        width: 28, height: 28,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#667B53',
+        borderStyle: 'dashed',
+        justifyContent: 'center', alignItems: 'center'
+    },
+    actionRow: {
+        flexDirection: 'row',
+        gap: 10
+    },
+    actionBtn: {
+        flex: 2,
+        backgroundColor: '#3C493A',
+        flexDirection: 'row',
+        paddingVertical: 14,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 10
+    },
+    actionBtnOutline: {
+        flex: 1,
+        borderWidth: 1.5,
+        borderColor: '#667B53',
+        paddingVertical: 14,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center'
+    },
+    actionBtnText: {
+        color: 'white',
+        fontFamily: 'Montserrat-Bold',
+        fontSize: 11
+    },
+    actionBtnTextOutline: {
+        color: '#667B53',
+        fontFamily: 'Montserrat-Bold',
+        fontSize: 11,
+        marginLeft: 5
+    },
+    parcelStat: {
+        marginTop: 12,
+        alignItems: 'center'
+    },
+    parcelStatText: {
+        fontSize: 10,
+        fontFamily: 'Montserrat-SemiBold',
+        color: '#A2845E'
+    },
+    cloudInfo: {
+        backgroundColor: '#F0F5EB',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 15,
+        borderWidth: 1,
+        borderColor: '#B7D098'
+    },
+    cloudRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 4
+    },
+    cloudText: {
+        fontSize: 10,
+        fontFamily: 'Montserrat-SemiBold',
+        color: '#3C493A',
+        marginLeft: 6,
+        flex: 1
+    },
+
+    // Compact List Item
     photoCard: {
         flexDirection: 'row',
         backgroundColor: 'white',
-        borderRadius: 10,
+        borderRadius: 16,
         padding: 10,
-        marginBottom: 10,
+        marginBottom: 12,
         alignItems: 'center',
-        elevation: 1,
-        borderLeftWidth: 4,
-        borderLeftColor: '#667B53',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
     },
-    photoThumb: { width: 90, height: 60, borderRadius: 4 },
-    photoInfo: { flex: 1, marginLeft: 15 },
-    photoDate: {
-        fontSize: 14,
-        fontFamily: 'Montserrat-Bold',
-        color: '#3C493A'
-    },
-    photoTime: {
-        fontSize: 11,
-        fontFamily: 'Montserrat-Regular',
-        color: '#5E462F',
-    },
-    photoMetaRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 2,
-    },
-    photoParcel: {
-        fontSize: 11,
-        fontFamily: 'Montserrat-SemiBold',
-        color: '#667B53',
-    },
-    deleteBtn: { padding: 10 },
-    emptyContainer: { alignItems: 'center', marginTop: 100 },
-    emptyText: {
-        color: '#3C493A',
-        marginTop: 15,
-        fontSize: 14,
-        fontFamily: 'Montserrat-Regular'
-    },
-    sectionContainer: {
-        marginBottom: 20,
-        backgroundColor: 'white',
-        borderRadius: 15,
-        padding: 20,
-        elevation: 2,
-        borderWidth: 1,
-        borderColor: '#B7D098',
-    },
-    sectionHeader: {
-        marginBottom: 15,
-        borderBottomWidth: 1,
-        borderBottomColor: '#F7EEE3',
-        paddingBottom: 8,
-    },
-    sectionTitle: {
-        fontSize: 14,
-        fontFamily: 'Montserrat-Bold',
-        letterSpacing: 1.5,
-        color: '#3C493A',
-    },
-    yearPicker: {
-        flexDirection: 'row',
-        marginBottom: 20,
-    },
-    yearBtn: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#667B53',
-        marginRight: 10,
-    },
-    yearBtnActive: {
-        backgroundColor: '#667B53',
-    },
-    yearBtnText: {
-        fontFamily: 'Montserrat-Bold',
-        color: '#667B53',
-    },
-    yearBtnActiveText: {
-        color: 'white',
-    },
-    uploadBtn: {
-        flexDirection: 'row',
-        backgroundColor: '#5E462F', // Brown
-        padding: 15,
+    thumbContainer: {
+        width: 80,
+        height: 60,
         borderRadius: 10,
+        backgroundColor: '#f0f0f0',
+        overflow: 'hidden',
         justifyContent: 'center',
-        alignItems: 'center',
+        alignItems: 'center'
     },
-    uploadBtnText: {
-        color: 'white',
-        fontFamily: 'Montserrat-Bold',
-        fontSize: 10,
-        marginLeft: 8,
-        letterSpacing: 0.5,
+    photoThumb: {
+        width: 60,
+        height: 80,
+        transform: [{ rotate: '270deg' }]
     },
-    uploadRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-    },
-    pickerContainer: {
-        flex: 1,
-        backgroundColor: '#F7EEE3',
-    },
-    pickerHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingTop: 60,
-        paddingHorizontal: 15,
-        paddingBottom: 20,
-        backgroundColor: 'white',
-        borderBottomWidth: 1,
-        borderBottomColor: '#B7D098',
-    },
-    pickerTitleRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    backBtn: {
-        marginRight: 15,
-        padding: 5,
-    },
-    pickerTitle: {
-        fontSize: 16,
-        fontFamily: 'Montserrat-Bold',
-        letterSpacing: 1,
-    },
-    pickerList: {
-        padding: 20,
-    },
-    driveFileItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'white',
-        padding: 15,
-        borderRadius: 12,
-        marginBottom: 10,
-        elevation: 1,
-    },
-    driveFileInfo: {
+    photoInfo: {
         flex: 1,
         marginLeft: 15,
+        justifyContent: 'center'
     },
-    driveFileName: {
+    cardTitle: {
         fontSize: 14,
-        fontFamily: 'Montserrat-SemiBold',
-        color: '#3C493A',
+        fontFamily: 'Montserrat-Bold',
+        color: '#313B28',
+        marginBottom: 4
     },
-    driveFileDate: {
-        fontSize: 11,
+    cardSub: {
+        flexDirection: 'row',
+        alignItems: 'center'
+    },
+    cardDate: {
+        fontSize: 10,
+        fontFamily: 'Montserrat-SemiBold',
+        color: '#5E462F',
+        marginLeft: 4
+    },
+    cardTime: {
+        fontSize: 10,
         fontFamily: 'Montserrat-Regular',
-        color: '#999',
-        marginTop: 2,
+        color: '#5E462F',
+        marginLeft: 4
+    },
+    weatherText: {
+        fontSize: 9,
+        fontFamily: 'Montserrat-SemiBold',
+        color: '#667B53',
+        marginLeft: 4
+    },
+    ndviBadgeSmall: {
+        backgroundColor: '#667B53',
+        paddingHorizontal: 4,
+        paddingVertical: 1,
+        borderRadius: 4,
+        marginLeft: 8
+    },
+    ndviBadgeText: {
+        color: 'white',
+        fontSize: 8,
+        fontFamily: 'Montserrat-Bold'
+    },
+    cardTime: {
+        fontSize: 10,
+        fontFamily: 'Montserrat-SemiBold',
+        color: '#5E462F',
+        marginLeft: 4
+    },
+    deleteBtnCompact: {
+        padding: 10,
+        marginLeft: 5
+    },
+
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 60,
+        padding: 40
+    },
+    emptyText: {
+        color: '#3C493A',
+        marginTop: 20,
+        fontSize: 15,
+        fontFamily: 'Montserrat-SemiBold',
+        textAlign: 'center',
+        lineHeight: 24
     },
     loadingText: {
         marginTop: 15,
-        fontFamily: 'Montserrat-Regular',
-        color: '#666',
-    },
-    processingOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.7)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 100,
-    },
-    processingText: {
-        color: 'white',
-        marginTop: 15,
-        fontFamily: 'Montserrat-Bold',
-    },
-    parcelList: {
-        marginTop: 15,
-    },
-    parcelCountText: {
-        fontSize: 12,
-        fontFamily: 'Montserrat-SemiBold',
-        color: '#666',
-        marginBottom: 10,
-    },
-    parcelChips: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-    },
-    parcelChip: {
-        backgroundColor: '#F7EEE3',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 15,
-        marginRight: 8,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: '#B7D098',
-    },
-    parcelChipText: {
-        fontSize: 10,
-        fontFamily: 'Montserrat-Regular',
-        color: '#3C493A',
-    },
-    moreText: {
-        fontSize: 10,
-        fontFamily: 'Montserrat-Italic',
-        color: '#666',
-        marginTop: 5,
-    },
-    addYearBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 10,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#B7D098',
-        borderStyle: 'dashed',
-    },
-    addYearBtnText: {
-        fontSize: 10,
         fontFamily: 'Montserrat-Bold',
         color: '#667B53',
-        marginLeft: 4,
+        fontSize: 12,
+        letterSpacing: 1
     },
+
+    // Modal Styles
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(247, 238, 227, 0.95)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
+        padding: 30,
     },
     modalContent: {
         backgroundColor: 'white',
-        borderRadius: 20,
-        padding: 25,
+        borderRadius: 30,
+        padding: 30,
         width: '100%',
-        maxWidth: 400,
-        elevation: 5,
+        elevation: 20,
+        borderWidth: 1,
+        borderColor: '#B7D098'
     },
     modalTitle: {
         fontSize: 18,
         fontFamily: 'Montserrat-Bold',
-        color: '#3C493A',
         marginBottom: 20,
         textAlign: 'center',
-        letterSpacing: 1,
+        color: '#3C493A'
     },
     yearInput: {
-        borderWidth: 1,
-        borderColor: '#B7D098',
-        borderRadius: 10,
-        padding: 15,
-        fontSize: 20,
+        backgroundColor: '#F7EEE3',
+        borderRadius: 15,
+        padding: 18,
+        fontSize: 22,
         fontFamily: 'Montserrat-Bold',
         textAlign: 'center',
-        color: '#000',
-        marginBottom: 25,
+        color: '#667B53',
+        marginBottom: 25
     },
     modalButtons: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        gap: 15
     },
     modalBtn: {
-        flex: 0.48,
-        paddingVertical: 15,
-        borderRadius: 10,
+        flex: 1,
+        paddingVertical: 16,
+        borderRadius: 14,
         alignItems: 'center',
     },
-    cancelBtn: {
-        backgroundColor: '#F7EEE3',
-    },
-    confirmBtn: {
-        backgroundColor: '#667B53',
-    },
-    cancelBtnText: {
-        color: '#5E462F',
-        fontFamily: 'Montserrat-Bold',
-        fontSize: 12,
-    },
-    confirmBtnText: {
-        color: 'white',
-        fontFamily: 'Montserrat-Bold',
-        fontSize: 12,
-    },
+    cancelBtn: { backgroundColor: '#f0f0f0' },
+    confirmBtn: { backgroundColor: '#667B53' },
+    cancelBtnText: { fontFamily: 'Montserrat-Bold', color: '#888' },
+    confirmBtnText: { fontFamily: 'Montserrat-Bold', color: 'white' },
+
     fullscreenOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.95)',
@@ -853,10 +936,8 @@ const styles = StyleSheet.create({
     },
     closeFullscreenBtn: {
         position: 'absolute',
-        top: 50,
-        right: 20,
-        zIndex: 10,
-        padding: 10,
+        top: 60, right: 30,
+        zIndex: 100
     },
     fullscreenImage: {
         width: '100%',

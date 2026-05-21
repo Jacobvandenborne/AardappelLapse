@@ -10,7 +10,30 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as turf from '@turf/turf';
 import * as FileSystem from 'expo-file-system';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { GoogleDrive } from '../lib/googleDrive';
+import Slider from '@react-native-community/slider';
+
+// Helper to fetch weather data (Option 5)
+const fetchWeather = async (lat, lon) => {
+    try {
+        const API_KEY = 'YOUR_OPENWEATHERMAP_API_KEY'; // Replace with real key
+        const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.main) {
+            return {
+                temp: data.main.temp,
+                description: data.weather[0]?.description,
+                humidity: data.main.humidity
+            };
+        }
+        return null;
+    } catch (e) {
+        console.warn("[Weather] Fetch failed:", e.message);
+        return null;
+    }
+};
 
 export default function CameraScreen({ route }) {
     const [facing, setFacing] = useState('back');
@@ -25,6 +48,7 @@ export default function CameraScreen({ route }) {
     const [activeParcels, setActiveParcels] = useState([]);
     const [activeYear, setActiveYear] = useState(null);
     const [backupStatus, setBackupStatus] = useState('idle'); // idle, backing-up, success, error
+    const [ghostOpacity, setGhostOpacity] = useState(0.35);
 
     // Use Dimensions for basic sizing, but ScreenOrientation for rotation logic
     const [dims, setDims] = useState(Dimensions.get('window'));
@@ -87,11 +111,33 @@ export default function CameraScreen({ route }) {
     }, []);
 
     useEffect(() => {
-        if (route?.params?.ghostImage) {
-            setGhostImage(route.params.ghostImage);
-        } else if (locationPermission?.granted && isConnected) {
-            updateGhostImage();
+        let watchId = null;
+        if (locationPermission?.granted && isConnected && !route?.params?.ghostImage) {
+            (async () => {
+                // Initial load
+                updateGhostImage();
+
+                // Watch for changes, but with better accuracy and a fallback
+                try {
+                    console.log("[Camera] Starting location watch for Ghost Image...");
+                    watchId = await Location.watchPositionAsync(
+                        {
+                            accuracy: Location.Accuracy.BestForNavigation,
+                            distanceInterval: 5 // Smaller interval for better precision
+                        },
+                        (loc) => {
+                            console.log("[Camera] Location updated, checking for ghost image...");
+                            updateGhostImage(loc);
+                        }
+                    );
+                } catch (e) {
+                    console.warn("[Camera] Location watch error:", e);
+                }
+            })();
         }
+        return () => {
+            if (watchId) watchId.remove();
+        };
     }, [isConnected, locationPermission, route?.params?.ghostImage]);
 
     const checkQueue = async () => {
@@ -125,13 +171,18 @@ export default function CameraScreen({ route }) {
         return null;
     };
 
-    const updateGhostImage = async () => {
+    const updateGhostImage = async (providedLoc = null) => {
+        if (loadingGhost) return;
         setLoadingGhost(true);
         try {
-            const loc = await Location.getCurrentPositionAsync({});
+            const loc = providedLoc || await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
             const nearestUrl = await fetchNearestPhoto(loc.coords.latitude, loc.coords.longitude);
-            // Fix: setGhostImage to nearestUrl (can be null, which clears the ghost)
-            setGhostImage(nearestUrl);
+
+            // Only update if it actually changed to prevent flickering
+            if (nearestUrl !== ghostImage) {
+                console.log("[Camera] Updating Ghost Image to:", nearestUrl ? "Success" : "None found nearby");
+                setGhostImage(nearestUrl);
+            }
         } catch (e) {
             console.log("Error fetching ghost image:", e);
             setGhostImage(null);
@@ -158,17 +209,23 @@ export default function CameraScreen({ route }) {
                 encoding: 'base64',
             });
             const driveId = await GoogleDrive.uploadFile(fileName, 'image/jpeg', base64, folderId);
-            if (driveId) {
-                console.log("[Camera] Google Drive backup successful, ID:", driveId);
-                setBackupStatus('success');
-                setTimeout(() => setBackupStatus('idle'), 3000);
-            } else {
-                throw new Error("No Drive ID returned");
-            }
+
+            console.log("[Camera] Google Drive backup successful, ID:", driveId);
+            setBackupStatus('success');
+            setTimeout(() => setBackupStatus('idle'), 3000);
+            return driveId;
         } catch (e) {
-            console.error("[Camera] Google Drive backup failed:", e);
-            setBackupStatus('error');
-            setTimeout(() => setBackupStatus('idle'), 5000);
+            console.error("[Camera] Google Drive backup failed:", e.message);
+
+            if (e.message === 'AUTH_MISSING') {
+                setBackupStatus('error-auth');
+                console.warn("[Camera] Backup failed due to missing Google Token.");
+            } else {
+                setBackupStatus('error');
+            }
+
+            setTimeout(() => setBackupStatus('idle'), 6000);
+            return null;
         }
     };
 
@@ -220,6 +277,12 @@ export default function CameraScreen({ route }) {
             console.warn("[Camera] User fetch failed/timed out, proceeding as anonymous:", e.message);
         }
 
+        // Fetch weather data (Option 5)
+        let weather = null;
+        if (location?.coords) {
+            weather = await fetchWeather(location.coords.latitude, location.coords.longitude);
+        }
+
         console.log("[Camera] Inserting into DB table 'photos'...");
         const insertData = {
             image_url: publicUrl,
@@ -230,6 +293,10 @@ export default function CameraScreen({ route }) {
             user_email: user?.email || null,
             parcel_name: parcelName || null,
             cropping_year: activeYear || null,
+            // Advanced features
+            weather_temp: weather?.temp || null,
+            weather_description: weather?.description || null,
+            weather_humidity: weather?.humidity || null,
         };
 
         const { data: dbData, error: dbError } = await supabase
@@ -243,7 +310,7 @@ export default function CameraScreen({ route }) {
         }
 
         console.log("[Camera] DB insert success:", dbData);
-        return publicUrl;
+        return { publicUrl, record: dbData[0] };
     };
 
     const takePhoto = async () => {
@@ -257,29 +324,46 @@ export default function CameraScreen({ route }) {
                     skipProcessing: false,
                 });
 
+                // Correct for sensor orientation: Rotate based on whether we are currently in landscape
+                console.log("[Camera] Correcting orientation. IsLandscape:", isLandscape);
+                const rotation = isLandscape ? 270 : 0; // Rotate 270 if landscape, else keep as is
+                const manipulated = await manipulateAsync(
+                    photo.uri,
+                    [{ rotate: rotation }],
+                    { compress: 0.8, format: SaveFormat.JPEG }
+                );
+
                 if (isConnected) {
                     try {
-                        const parcelName = findParcelName(location.coords.latitude, location.coords.longitude);
-                        const publicUrl = await uploadToSupabase(photo.uri, location, parcelName);
+                        const parcelName = route?.params?.forcedParcelName || findParcelName(location.coords.latitude, location.coords.longitude);
+                        const { publicUrl, record } = await uploadToSupabase(manipulated.uri, location, parcelName);
                         setGhostImage(publicUrl);
 
-                        // Async backup - don't await to not block the UI
-                        const now = new Date();
-                        const dateStr = now.toISOString().split('T')[0];
-                        const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-').slice(0, 5);
-                        const sanitizeParcel = (parcelName || "Onbekend").replace(/[^a-z0-9]/gi, '_');
-                        const fileName = `${dateStr}_${timeStr}_${sanitizeParcel}_${Date.now()}.jpg`;
-                        const driveFolderId = GOOGLE_DRIVE_FOLDERS[activeYear] || null;
-                        triggerGoogleBackup(photo.uri, fileName, driveFolderId);
+                        // Async backup - handle status update in background
+                        (async () => {
+                            const now = new Date();
+                            const dateStr = now.toISOString().split('T')[0];
+                            const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-').slice(0, 5);
+                            const sanitizeParcel = (parcelName || "Onbekend").replace(/[^a-z0-9]/gi, '_');
+                            const fileName = `${dateStr}_${timeStr}_${sanitizeParcel}_${Date.now()}.jpg`;
+                            const driveFolderId = GOOGLE_DRIVE_FOLDERS[activeYear] || null;
+                            const driveId = await triggerGoogleBackup(manipulated.uri, fileName, driveFolderId);
+
+                            if (driveId && record?.id) {
+                                // Update Supabase with the Drive ID for the icon in Management
+                                await supabase.from('photos').update({ google_drive_id: driveId }).eq('id', record.id);
+                            }
+                        })();
 
                         Alert.alert('Succes', `Foto geüpload! Perceel: ${parcelName || 'Onbekend'}`);
                     } catch (e) {
-                        await saveToQueue(photo.uri, location);
+                        await saveToQueue(manipulated.uri, location, parcelName);
                         await checkQueue();
                         Alert.alert("Opgeslagen", "Upload mislukt, lokaal opgeslagen.");
                     }
                 } else {
-                    await saveToQueue(photo.uri, location);
+                    const localParcel = route?.params?.forcedParcelName || findParcelName(location.coords.latitude, location.coords.longitude);
+                    await saveToQueue(manipulated.uri, location, localParcel);
                     await checkQueue();
                     Alert.alert("Offline", "Foto lokaal opgeslagen.");
                 }
@@ -298,7 +382,7 @@ export default function CameraScreen({ route }) {
         let successCount = 0;
         for (const item of queue) {
             try {
-                const parcelName = findParcelName(item.location.coords.latitude, item.location.coords.longitude);
+                const parcelName = item.parcelName || findParcelName(item.location.coords.latitude, item.location.coords.longitude);
                 const publicUrl = await uploadToSupabase(item.uri, item.location, parcelName);
 
                 // Trigger Drive backup for synced items too
@@ -326,21 +410,32 @@ export default function CameraScreen({ route }) {
         <View style={styles.container}>
             <CameraView style={styles.camera} facing={facing} ref={cameraRef} />
 
-            {/* UI Overlays OUTSIDE of CameraView */}
             <View
                 style={[
                     styles.ghostOverlay,
                     {
                         width: '100%',
-                        height: isLandscape ? height : width * (16 / 9),
-                        top: isLandscape ? 0 : '50%',
-                        marginTop: isLandscape ? 0 : -(width * (16 / 9) / 2)
+                        height: '100%',
+                        opacity: ghostOpacity,
+                        justifyContent: 'center',
+                        alignItems: 'center'
                     }
                 ]}
                 pointerEvents="none"
             >
                 {ghostImage && (
-                    <Image source={{ uri: ghostImage }} style={styles.ghostImage} contentFit="cover" />
+                    <Image
+                        source={{ uri: ghostImage }}
+                        style={[
+                            styles.ghostImage,
+                            {
+                                transform: [{ rotate: '270deg' }],
+                                width: isLandscape ? width : height,
+                                height: isLandscape ? height : width
+                            }
+                        ]}
+                        contentFit="contain"
+                    />
                 )}
             </View>
 
@@ -360,18 +455,39 @@ export default function CameraScreen({ route }) {
                 </View>
 
                 {backupStatus !== 'idle' && (
-                    <View style={[styles.backupBadge, backupStatus === 'error' && styles.backupError]}>
+                    <View style={[
+                        styles.backupBadge,
+                        (backupStatus === 'error' || backupStatus === 'error-auth') && styles.backupError
+                    ]}>
                         <Ionicons
                             name={backupStatus === 'backing-up' ? "cloud-upload" : (backupStatus === 'success' ? "cloud-done" : "cloud-offline")}
                             size={14}
                             color="white"
                         />
                         <Text style={styles.backupText}>
-                            {backupStatus === 'backing-up' ? 'BACK-UP...' : (backupStatus === 'success' ? 'BACK-UP OK' : 'BACK-UP FOUT')}
+                            {backupStatus === 'backing-up' ? 'BACK-UP...' :
+                                (backupStatus === 'success' ? 'BACK-UP OK' :
+                                    (backupStatus === 'error-auth' ? 'LOG-IN VERLOPEN' : 'BACK-UP FOUT'))}
                         </Text>
                     </View>
                 )}
             </View>
+
+            {ghostImage && (
+                <View style={[styles.sliderContainer, isLandscape && styles.sliderContainerLandscape]}>
+                    <Ionicons name="contrast-outline" size={20} color="white" />
+                    <Slider
+                        style={isLandscape ? styles.sliderVertical : styles.sliderHorizontal}
+                        minimumValue={0.0}
+                        maximumValue={1.0}
+                        value={ghostOpacity}
+                        onValueChange={setGhostOpacity}
+                        minimumTrackTintColor="#667B53"
+                        maximumTrackTintColor="#FFFFFF"
+                        thumbTintColor="#FFFFFF"
+                    />
+                </View>
+            )}
 
             <View style={[styles.bottomBar, isLandscape && styles.sidebar]}>
                 <TouchableOpacity style={styles.sideButton} onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}>
@@ -399,7 +515,6 @@ const styles = StyleSheet.create({
     camera: { flex: 1 },
     ghostOverlay: {
         position: 'absolute',
-        opacity: 0.35,
         justifyContent: 'center',
         alignItems: 'center',
         width: '100%',
@@ -512,5 +627,39 @@ const styles = StyleSheet.create({
         fontSize: 13
     },
     spacer: { width: 44 },
+    sliderContainer: {
+        position: 'absolute',
+        bottom: 140,
+        left: 20,
+        right: 20,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        borderRadius: 20,
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        flexDirection: 'row',
+        alignItems: 'center',
+        zIndex: 20,
+    },
+    sliderContainerLandscape: {
+        bottom: 20,
+        top: 20,
+        left: 20,
+        right: 'auto',
+        width: 60,
+        paddingHorizontal: 10,
+        paddingVertical: 15,
+        flexDirection: 'column',
+    },
+    sliderHorizontal: {
+        flex: 1,
+        marginLeft: 10,
+        height: 40,
+    },
+    sliderVertical: {
+        width: 150,
+        height: 40,
+        marginTop: 65,
+        transform: [{ rotate: '-90deg' }],
+    },
     message: { color: 'white', textAlign: 'center', marginTop: 100 },
 });

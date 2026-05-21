@@ -31,6 +31,7 @@ export default function MapScreen({ navigation }) {
     const [parcels, setParcels] = useState([]);
     const [calloutIndex, setCalloutIndex] = useState({});
     const [activeClusterId, setActiveClusterId] = useState(null);
+    const [showNdvi, setShowNdvi] = useState(false);
     const mapRef = useRef(null);
 
     // Refresh data when screen is focused
@@ -148,10 +149,30 @@ export default function MapScreen({ navigation }) {
         console.log(`[Map] Clustering complete. Found ${newClusters.length} clusters in ${Date.now() - start}ms`);
     };
 
-    const handleAddPhoto = (ghostImageUrl) => {
+    // Helper for NDVI coloring (Option 4)
+    const getParcelColor = (parcel) => {
+        if (!showNdvi) return "rgba(102, 123, 83, 0.3)"; // Standard VDB Green
+
+        // Find latest photo for this parcel
+        const parcelPhoto = clusters.find(c =>
+            c.photos.some(p => p.parcel_name === parcel.name)
+        )?.latestPhoto;
+
+        if (!parcelPhoto || parcelPhoto.ndvi_value === undefined || parcelPhoto.ndvi_value === null) {
+            return "rgba(0, 0, 0, 0.1)"; // No data
+        }
+
+        const ndvi = parcelPhoto.ndvi_value;
+        // Simple color ramp: Red (low) -> Yellow (mid) -> Green (high)
+        if (ndvi < 0.3) return "rgba(213, 13, 23, 0.6)";
+        if (ndvi < 0.6) return "rgba(208, 163, 103, 0.6)";
+        return "rgba(102, 123, 83, 0.7)";
+    };
+
+    const handleAddPhoto = (ghostImageUrl, parcelName) => {
         navigation.navigate('Camera', {
             screen: 'Camera',
-            params: { ghostImage: ghostImageUrl }
+            params: { ghostImage: ghostImageUrl, forcedParcelName: parcelName }
         });
     };
 
@@ -223,7 +244,7 @@ export default function MapScreen({ navigation }) {
                             : [] // Simple polygon support for now
                         }
                         strokeColor="#667B53"
-                        fillColor="rgba(102, 123, 83, 0.3)"
+                        fillColor={getParcelColor(parcel)}
                         strokeWidth={2}
                     />
                 ))}
@@ -253,6 +274,14 @@ export default function MapScreen({ navigation }) {
 
             <TouchableOpacity style={styles.fab} onPress={zoomToParcels}>
                 <Ionicons name="map" size={24} color="white" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+                style={[styles.layerToggle, showNdvi && styles.layerToggleActive]}
+                onPress={() => setShowNdvi(!showNdvi)}
+            >
+                <Ionicons name={showNdvi ? "leaf" : "leaf-outline"} size={22} color="white" />
+                <Text style={styles.layerToggleText}>{showNdvi ? 'NDVI AAN' : 'NDVI UIT'}</Text>
             </TouchableOpacity>
 
             {/* Bottom Sheet Detail View */}
@@ -294,19 +323,13 @@ export default function MapScreen({ navigation }) {
                                 <Text style={styles.btnText}>Bekijk Timelapse</Text>
                             </TouchableOpacity>
 
-                            {isNearby ? (
-                                <TouchableOpacity
-                                    style={[styles.sheetBtn, styles.addPhotoBtn]}
-                                    onPress={() => handleAddPhoto(selectedCluster.latestPhoto.image_url)}
-                                >
-                                    <Ionicons name="camera" size={20} color="white" />
-                                    <Text style={styles.btnText}>+ Foto Toevoegen</Text>
-                                </TouchableOpacity>
-                            ) : (
-                                <View style={[styles.sheetBtn, styles.disabledBtn]}>
-                                    <Text style={styles.disabledText}>Ga dichterbij om foto toe te voegen</Text>
-                                </View>
-                            )}
+                            <TouchableOpacity
+                                style={[styles.sheetBtn, isNearby ? styles.addPhotoBtn : styles.forceAddPhotoBtn]}
+                                onPress={() => handleAddPhoto(selectedCluster.latestPhoto.image_url, selectedCluster.photos[calloutIndex[selectedCluster.id] || 0]?.parcel_name)}
+                            >
+                                <Ionicons name={isNearby ? "camera" : "warning"} size={20} color="white" />
+                                <Text style={styles.btnText}>{isNearby ? '+ Foto Toevoegen' : 'Forceer Foto (Te ver)'}</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 </View>
@@ -337,8 +360,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     markerImage: {
-        width: 60, // Swapped from height to fill box after 270 rotation
-        height: 80,
+        width: 60,
+        height: 60,
         transform: [{ rotate: '270deg' }]
     },
     bottomSheet: {
@@ -379,12 +402,12 @@ const styles = StyleSheet.create({
         width: 173, height: 130, // 4:3 landscape
         borderRadius: 12,
         overflow: 'hidden',
-        backgroundColor: '#f0f0f0',
+        backgroundColor: '#000',
         justifyContent: 'center',
         alignItems: 'center',
     },
     sheetImage: {
-        width: 130, // Swapped to fill 173x130 after 270 rotation
+        width: 130,
         height: 173,
         transform: [{ rotate: '270deg' }]
     },
@@ -413,6 +436,7 @@ const styles = StyleSheet.create({
     },
     timelapseBtn: { backgroundColor: '#3C493A' }, // Dark Green
     addPhotoBtn: { backgroundColor: '#667B53' }, // Brand Green
+    forceAddPhotoBtn: { backgroundColor: '#D51317' }, // Red warning color
     disabledBtn: { backgroundColor: '#D0A367', opacity: 0.5 },
     disabledText: {
         color: 'white',
@@ -424,8 +448,8 @@ const styles = StyleSheet.create({
     btnText: {
         color: 'white',
         fontFamily: 'Montserrat-Bold',
-        fontSize: 12,
-        marginLeft: 8,
+        fontSize: 11,
+        marginLeft: 6,
         letterSpacing: 0.5,
     },
     fab: {
@@ -442,5 +466,29 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
+    },
+    layerToggle: {
+        position: 'absolute',
+        top: 60,
+        right: 20,
+        backgroundColor: 'rgba(60, 73, 58, 0.8)',
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+        borderRadius: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        elevation: 5,
+        zIndex: 20,
+    },
+    layerToggleActive: {
+        backgroundColor: '#667B53',
+        borderWidth: 1,
+        borderColor: '#B7D098',
+    },
+    layerToggleText: {
+        color: 'white',
+        fontFamily: 'Montserrat-Bold',
+        fontSize: 10,
+        marginLeft: 8,
     }
 });
